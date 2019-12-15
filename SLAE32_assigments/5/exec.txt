@@ -1,0 +1,335 @@
+
+       Name: Linux Execute Command
+     Module: payload/linux/x86/exec
+   Platform: Linux
+       Arch: x86
+Needs Admin: No
+ Total size: 36
+       Rank: Normal
+
+Provided by:
+    vlad902 <vlad902@gmail.com>
+
+Basic options:
+Name  Current Setting  Required  Description
+----  ---------------  --------  -----------
+CMD                    yes       The command string to execute
+
+Description:
+  Execute an arbitrary command
+
+
+    Name                Current Setting  Required  Description
+    ----                ---------------  --------  -----------
+    AppendExit          false            no        Append a stub that executes the exit(0) system call
+    PrependChrootBreak  false            no        Prepend a stub that will break out of a chroot (includes setreuid to root)
+    PrependFork         false            no        Prepend a stub that executes: if (fork()) { exit(0); }
+    PrependSetgid       false            no        Prepend a stub that executes the setgid(0) system call
+    PrependSetregid     false            no        Prepend a stub that executes the setregid(0, 0) system call
+    PrependSetresgid    false            no        Prepend a stub that executes the setresgid(0, 0, 0) system call
+    PrependSetresuid    false            no        Prepend a stub that executes the setresuid(0, 0, 0) system call
+    PrependSetreuid     false            no        Prepend a stub that executes the setreuid(0, 0) system call
+    PrependSetuid       false            no        Prepend a stub that executes the setuid(0) system call
+    VERBOSE             false            no        Enable detailed status messages
+    WORKSPACE                            no        Specify the workspace for this module
+    Name  Current Setting  Required  Description
+    ----  ---------------  --------  -----------
+
+ msfvenom -p linux/x86/exec CMD=id -f c --smallest >> exec.txt
+
+unsigned char buf[] = 
+"\x6a\x0b\x58\x99\x52\x66\x68\x2d\x63\x89\xe7\x68\x2f\x73\x68"
+"\x00\x68\x2f\x62\x69\x6e\x89\xe3\x52\xe8\x03\x00\x00\x00\x69"
+"\x64\x00\x57\x53\x89\xe1\xcd\x80";
+
+adp@adp-MS-7756:~/SLAE/Module-1/assignments/5_metasploit_analysis$ msfvenom -p linux/x86/exec CMD=id -f raw --smallest | ndisasm -u -
+[-] No platform was selected, choosing Msf::Module::Platform::Linux from the payload
+[-] No arch selected, selecting arch: x86 from the payload
+No encoder or badchars specified, outputting raw payload
+Payload size: 38 bytes
+
+00000000  6A0B              push byte +0xb
+00000002  58                pop eax
+00000003  99                cdq
+00000004  52                push edx
+00000005  66682D63          push word 0x632d
+00000009  89E7              mov edi,esp
+0000000B  682F736800        push dword 0x68732f
+00000010  682F62696E        push dword 0x6e69622f
+00000015  89E3              mov ebx,esp
+00000017  52                push edx
+00000018  E803000000        call 0x20
+0000001D  696400575389E1CD  imul esp,[eax+eax+0x57],dword 0xcde18953
+00000025  80                db 0x80
+
+Not much due to missaligment, we'll run int in gdb...
+
+Shellcode Length:  15
+uid=1000(adp) gid=1000(adp) groups=1000(adp),4(adm),24(cdrom),27(sudo),30(dip),46(plugdev),116(lpadmin),126(sambashare)
+adp@adp-MS-7756:~/SLAE/Module-1/assignments/5_metasploit_analysis$ gdb ./main 
+GNU gdb (Ubuntu 8.1-0ubuntu3) 8.1.0.20180409-git
+Copyright (C) 2018 Free Software Foundation, Inc.
+License GPLv3+: GNU GPL version 3 or later <http://gnu.org/licenses/gpl.html>
+This is free software: you are free to change and redistribute it.
+There is NO WARRANTY, to the extent permitted by law.  Type "show copying"
+and "show warranty" for details.
+This GDB was configured as "x86_64-linux-gnu".
+Type "show configuration" for configuration details.
+For bug reporting instructions, please see:
+<http://www.gnu.org/software/gdb/bugs/>.
+Find the GDB manual and other documentation resources online at:
+<http://www.gnu.org/software/gdb/documentation/>.
+For help, type "help".
+Type "apropos word" to search for commands related to "word"...
+
+warning: ~/.gdbinit.local: No such file or directory
+Reading symbols from ./main...done.
+gdb$ p/x code
+$1 = {0x6a, 0xb, 0x58, 0x99, 0x52, 0x66, 0x68, 0x2d, 0x63, 0x89, 0xe7, 0x68, 0x2f, 0x73, 0x68, 0x0, 0x68, 0x2f, 0x62, 0x69, 0x6e, 0x89, 0xe3, 0x52, 0xe8, 0x3, 0x0, 0x0, 0x0, 0x69, 0x64, 0x0, 0x57, 0x53, 0x89, 0xe1, 0xcd, 0x80, 0x0}
+gdb$ br code
+Function "code" not defined.
+gdb$ list
+1	#include <stdio.h>
+2	#include <string.h>
+3	
+4	unsigned char code[] = 
+5	"\x6a\x0b\x58\x99\x52\x66\x68\x2d\x63\x89\xe7\x68\x2f\x73\x68"
+6	"\x00\x68\x2f\x62\x69\x6e\x89\xe3\x52\xe8\x03\x00\x00\x00\x69"
+7	"\x64\x00\x57\x53\x89\xe1\xcd\x80";
+8	
+9	
+10	int main(int argc, char ** argv)
+gdb$ list
+11	{
+12	
+13		printf("Shellcode Length:  %d\n", strlen(code));
+14	
+15		int (*ret)() = (int(*)())code;
+16		ret();
+17	
+18	}
+19	
+20	
+gdb$ br 16
+Breakpoint 1 at 0x598: file main.c, line 16.
+gdb$ run
+Starting program: /home/adp/SLAE/Module-1/assignments/5_metasploit_analysis/main 
+Shellcode Length:  15
+--------------------------------------------------------------------------[regs]
+  EAX: 0x56557020  EBX: 0x56556FD4  ECX: 0x00000000  EDX: 0xF7FA4890  o d I t S z a p c 
+  ESI: 0xF7FA3000  EDI: 0x00000000  EBP: 0xFFFFCE88  ESP: 0xFFFFCE70  EIP: 0x56555598
+  CS: 0023  DS: 002B  ES: 002B  FS: 0000  GS: 0063  SS: 002B
+[0x002B:0xFFFFCE70]------------------------------------------------------[stack]
+0xFFFFCEC0 : 30 CF FF FF 00 00 00 00 - 00 30 FA F7 00 00 00 00 0........0......
+0xFFFFCEB0 : 01 00 00 00 34 CF FF FF - 00 30 FA F7 5A 57 FE F7 ....4....0..ZW..
+0xFFFFCEA0 : 01 00 00 00 34 CF FF FF - 3C CF FF FF C4 CE FF FF ....4...<.......
+0xFFFFCE90 : 00 30 FA F7 00 30 FA F7 - 00 00 00 00 81 3E DE F7 .0...0.......>..
+0xFFFFCE80 : A0 CE FF FF 00 00 00 00 - 00 00 00 00 81 3E DE F7 .............>..
+0xFFFFCE70 : 01 00 00 00 34 CF FF FF - 3C CF FF FF 20 70 55 56 ....4...<... pUV
+[0x002B:0xFFFFCE70]-------------------------------------------------------[data]
+0xFFFFCE70 : 01 00 00 00 34 CF FF FF - 3C CF FF FF 20 70 55 56 ....4...<... pUV
+0xFFFFCE80 : A0 CE FF FF 00 00 00 00 - 00 00 00 00 81 3E DE F7 .............>..
+0xFFFFCE90 : 00 30 FA F7 00 30 FA F7 - 00 00 00 00 81 3E DE F7 .0...0.......>..
+0xFFFFCEA0 : 01 00 00 00 34 CF FF FF - 3C CF FF FF C4 CE FF FF ....4...<.......
+0xFFFFCEB0 : 01 00 00 00 34 CF FF FF - 00 30 FA F7 5A 57 FE F7 ....4....0..ZW..
+0xFFFFCEC0 : 30 CF FF FF 00 00 00 00 - 00 30 FA F7 00 00 00 00 0........0......
+0xFFFFCED0 : 00 00 00 00 76 EB A3 C0 - 66 2D 42 83 00 00 00 00 ....v...f-B.....
+0xFFFFCEE0 : 00 00 00 00 00 00 00 00 - 40 00 00 00 24 D0 FF F7 ........@...$...
+--------------------------------------------------------------------------[code]
+=> 0x56555598 <main+75>:	mov    -0xc(%ebp),%eax
+   0x5655559b <main+78>:	call   *%eax
+   0x5655559d <main+80>:	mov    $0x0,%eax
+   0x565555a2 <main+85>:	lea    -0x8(%ebp),%esp
+   0x565555a5 <main+88>:	pop    %ecx
+   0x565555a6 <main+89>:	pop    %ebx
+   0x565555a7 <main+90>:	pop    %ebp
+   0x565555a8 <main+91>:	lea    -0x4(%ecx),%esp
+--------------------------------------------------------------------------------
+
+Breakpoint 1, main (argc=0x1, argv=0xffffcf34) at main.c:16
+16		ret();
+gdb$ stepi
+--------------------------------------------------------------------------[regs]
+  EAX: 0x56557020  EBX: 0x56556FD4  ECX: 0x00000000  EDX: 0xF7FA4890  o d I t S z a p c 
+  ESI: 0xF7FA3000  EDI: 0x00000000  EBP: 0xFFFFCE88  ESP: 0xFFFFCE70  EIP: 0x5655559B
+  CS: 0023  DS: 002B  ES: 002B  FS: 0000  GS: 0063  SS: 002B
+[0x002B:0xFFFFCE70]------------------------------------------------------[stack]
+0xFFFFCEC0 : 30 CF FF FF 00 00 00 00 - 00 30 FA F7 00 00 00 00 0........0......
+0xFFFFCEB0 : 01 00 00 00 34 CF FF FF - 00 30 FA F7 5A 57 FE F7 ....4....0..ZW..
+0xFFFFCEA0 : 01 00 00 00 34 CF FF FF - 3C CF FF FF C4 CE FF FF ....4...<.......
+0xFFFFCE90 : 00 30 FA F7 00 30 FA F7 - 00 00 00 00 81 3E DE F7 .0...0.......>..
+0xFFFFCE80 : A0 CE FF FF 00 00 00 00 - 00 00 00 00 81 3E DE F7 .............>..
+0xFFFFCE70 : 01 00 00 00 34 CF FF FF - 3C CF FF FF 20 70 55 56 ....4...<... pUV
+[0x002B:0xFFFFCE70]-------------------------------------------------------[data]
+0xFFFFCE70 : 01 00 00 00 34 CF FF FF - 3C CF FF FF 20 70 55 56 ....4...<... pUV
+0xFFFFCE80 : A0 CE FF FF 00 00 00 00 - 00 00 00 00 81 3E DE F7 .............>..
+0xFFFFCE90 : 00 30 FA F7 00 30 FA F7 - 00 00 00 00 81 3E DE F7 .0...0.......>..
+0xFFFFCEA0 : 01 00 00 00 34 CF FF FF - 3C CF FF FF C4 CE FF FF ....4...<.......
+0xFFFFCEB0 : 01 00 00 00 34 CF FF FF - 00 30 FA F7 5A 57 FE F7 ....4....0..ZW..
+0xFFFFCEC0 : 30 CF FF FF 00 00 00 00 - 00 30 FA F7 00 00 00 00 0........0......
+0xFFFFCED0 : 00 00 00 00 76 EB A3 C0 - 66 2D 42 83 00 00 00 00 ....v...f-B.....
+0xFFFFCEE0 : 00 00 00 00 00 00 00 00 - 40 00 00 00 24 D0 FF F7 ........@...$...
+--------------------------------------------------------------------------[code]
+=> 0x5655559b <main+78>:	call   *%eax
+   0x5655559d <main+80>:	mov    $0x0,%eax
+   0x565555a2 <main+85>:	lea    -0x8(%ebp),%esp
+   0x565555a5 <main+88>:	pop    %ecx
+   0x565555a6 <main+89>:	pop    %ebx
+   0x565555a7 <main+90>:	pop    %ebp
+   0x565555a8 <main+91>:	lea    -0x4(%ecx),%esp
+   0x565555ab <main+94>:	ret    
+--------------------------------------------------------------------------------
+0x5655559b	16		ret();
+gdb$ stepi
+--------------------------------------------------------------------------[regs]
+  EAX: 0x56557020  EBX: 0x56556FD4  ECX: 0x00000000  EDX: 0xF7FA4890  o d I t S z a p c 
+  ESI: 0xF7FA3000  EDI: 0x00000000  EBP: 0xFFFFCE88  ESP: 0xFFFFCE6C  EIP: 0x56557020
+  CS: 0023  DS: 002B  ES: 002B  FS: 0000  GS: 0063  SS: 002B
+[0x002B:0xFFFFCE6C]------------------------------------------------------[stack]
+0xFFFFCEBC : 5A 57 FE F7 30 CF FF FF - 00 00 00 00 00 30 FA F7 ZW..0........0..
+0xFFFFCEAC : C4 CE FF FF 01 00 00 00 - 34 CF FF FF 00 30 FA F7 ........4....0..
+0xFFFFCE9C : 81 3E DE F7 01 00 00 00 - 34 CF FF FF 3C CF FF FF .>......4...<...
+0xFFFFCE8C : 81 3E DE F7 00 30 FA F7 - 00 30 FA F7 00 00 00 00 .>...0...0......
+0xFFFFCE7C : 20 70 55 56 A0 CE FF FF - 00 00 00 00 00 00 00 00  pUV............
+0xFFFFCE6C : 9D 55 55 56 01 00 00 00 - 34 CF FF FF 3C CF FF FF .UUV....4...<...
+[0x002B:0xFFFFCE6C]-------------------------------------------------------[data]
+0xFFFFCE6C : 9D 55 55 56 01 00 00 00 - 34 CF FF FF 3C CF FF FF .UUV....4...<...
+0xFFFFCE7C : 20 70 55 56 A0 CE FF FF - 00 00 00 00 00 00 00 00  pUV............
+0xFFFFCE8C : 81 3E DE F7 00 30 FA F7 - 00 30 FA F7 00 00 00 00 .>...0...0......
+0xFFFFCE9C : 81 3E DE F7 01 00 00 00 - 34 CF FF FF 3C CF FF FF .>......4...<...
+0xFFFFCEAC : C4 CE FF FF 01 00 00 00 - 34 CF FF FF 00 30 FA F7 ........4....0..
+0xFFFFCEBC : 5A 57 FE F7 30 CF FF FF - 00 00 00 00 00 30 FA F7 ZW..0........0..
+0xFFFFCECC : 00 00 00 00 00 00 00 00 - 76 EB A3 C0 66 2D 42 83 ........v...f-B.
+0xFFFFCEDC : 00 00 00 00 00 00 00 00 - 00 00 00 00 40 00 00 00 ............@...
+--------------------------------------------------------------------------[code]
+=> 0x56557020 <code>:	push   $0xb
+   0x56557022 <code+2>:	pop    %eax
+   0x56557023 <code+3>:	cltd   
+   0x56557024 <code+4>:	push   %edx
+   0x56557025 <code+5>:	pushw  $0x632d
+   0x56557029 <code+9>:	mov    %esp,%edi
+   0x5655702b <code+11>:	push   $0x68732f
+   0x56557030 <code+16>:	push   $0x6e69622f
+--------------------------------------------------------------------------------
+0x56557020 in code ()
+gdb$ disas code
+Dump of assembler code for function code:
+=> 0x56557020 <+0>:	push   $0xb
+   0x56557022 <+2>:	pop    %eax
+   0x56557023 <+3>:	cltd   
+   0x56557024 <+4>:	push   %edx
+   0x56557025 <+5>:	pushw  $0x632d
+   0x56557029 <+9>:	mov    %esp,%edi
+   0x5655702b <+11>:	push   $0x68732f
+   0x56557030 <+16>:	push   $0x6e69622f
+   0x56557035 <+21>:	mov    %esp,%ebx
+   0x56557037 <+23>:	push   %edx
+   0x56557038 <+24>:	call   0x56557040 <code+32>
+   0x5655703d <+29>:	imul   $0xcde18953,0x57(%eax,%eax,1),%esp
+   0x56557045 <+37>:	addb   $0x0,(%eax)
+End of assembler dump.
+gdb$ x/2cb 0x5655703d
+0x5655703d <code+29>:	0x69	0x64
+gdb$ x/2cb 0x5655703db
+0x655703db:	Cannot access memory at address 0x655703db
+gdb$ x/2cb 0x5655703d
+0x5655703d <code+29>:	0x69	0x64
+gdb$ 
+
+--- We see that it corresponds to 'i', 'd' , the command we want to execute
+
+Besides that, we cannot resolve the call to 0x56557040 since
+due to problems of aligment, the code is not vissible in gdb.
+
+We do the following 
+
+gdb$ x/10i 0x56557040
+   0x56557040 <code+32>:	push   %edi
+   0x56557041 <code+33>:	push   %ebx
+   0x56557042 <code+34>:	mov    %esp,%ecx
+   0x56557044 <code+36>:	int    $0x80
+   0x56557046 <code+38>:	add    %al,(%eax)
+   0x56557048:	add    %al,(%eax)
+   0x5655704a:	add    %al,(%eax)
+   0x5655704c:	add    %al,(%eax)
+   0x5655704e:	add    %al,(%eax)
+   0x56557050:	add    %al,(%eax)
+
+
+And we see the syscall that it was missing.
+
+Besides this, we analyze the two strings in the code:
+
+gdb$ x/s 0x5655702b
+0x5655702b <code+11>:	"h/sh"
+
+(/sh)
+
+gdb$ x/s 0x56557030
+0x56557030 <code+16>:	"h/bin\211\343R\350\003"
+
+(/bin)
+
+gdb$ x/s 0x56557025
+0x56557025 <code+5>:	"fh-c\211\347h/sh"
+
+(-c)
+
+With this information I can fully parse the shellcode:
+
+
+syscall information: 0xb = sys_execve	0x0b	
+
+char __user *	char __user *__user *	char __user *__user *	struct pt_regs *	-	arch/alpha/kernel/entry.S:925
+
+
+       int execve(const char *filename, char *const argv[],
+		     ebx		  ecx
+
+                  char *const envp[]);
+
+			edx
+
+=> 0x56557020 <+0>:	push   $0xb
+   0x56557022 <+2>:	pop    %eax
+
+eax = 0xb = sys_execve
+
+   0x56557023 <+3>:	cltd  : edx is zero
+
+edx is zero now
+ 
+   0x56557024 <+4>:	push   %edx // null character
+   0x56557025 <+5>:	pushw  $0x632d // -c
+   0x56557029 <+9>:	mov    %esp,%edi // edi has -c/null
+/bin/sh
+   0x5655702b <+11>:	push   $0x68732f ///bin/sh
+   0x56557030 <+16>:	push   $0x6e69622f
+   0x56557035 <+21>:	mov    %esp,%ebx -> addr en ebx: /bin/sh
+   0x56557037 <+23>:	push   %edx
+   0x56557038 <+24>:	call   0x56557040 <code+32> -> it puts the addr of
+   the string in the stack
+
+---
+
+* string 'id' 
+   0x5655703d <+29>:	imul   $0xcde18953,0x57(%eax,%eax,1),%esp
+   0x56557045 <+37>:	addb   $0x0,(%eax)
+---
+
+
+   0x56557040 <code+32>:	push   %edi
+   0x56557041 <code+33>:	push   %ebx
+   0x56557042 <code+34>:	mov    %esp,%ecx -> ecx has: null, id, null,-c,/bin/sh
+   0x56557044 <code+36>:	int    $0x80
+   0x56557046 <code+38>:	add    %al,(%eax)
+
+
+sys_execve_fn)(const char __user * filename: /bin/sh, ebx
+	    const char __user * const __user * argv: ecx: null,id,null,-c,/bin/sh
+	    const char __user * const __user * envp); edx: null: zero
+
+
+It executes /bin/sh -c id. 
+
+
